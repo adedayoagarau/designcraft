@@ -504,7 +504,8 @@ pub(crate) fn font_definitions(craft: &'static [designcraft_fonts::CraftFont], l
     let last_resort: Vec<String> = fonts.families.get(&FontFamily::Proportional).cloned().unwrap_or_default();
     // Missa: Instrument Sans leads; Source Sans 3 stays right behind it for every script
     // Instrument Sans does not cover (Cyrillic, Greek, Vietnamese and more).
-    // Instrument Sans sits on Source Sans 3's baseline, so layouts measured with it keep their places.
+    // The Instrument Sans files carry Source Sans 3's line metrics (ascent 1000, descent 326 per
+    // 1000), so rows and baselines keep the places the interface was laid out for.
     for (name, data) in [
         ("brand", include_bytes!("../../../assets/fonts/InstrumentSans-Regular.ttf").as_slice()),
         ("brand-semibold", include_bytes!("../../../assets/fonts/InstrumentSans-SemiBold.ttf").as_slice()),

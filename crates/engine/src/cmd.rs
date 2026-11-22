@@ -53,6 +53,7 @@ mod path_type;
 mod paths;
 mod pdflayers;
 mod place_text;
+mod poem;
 pub mod preflight;
 mod prefs;
 mod prepress;
@@ -213,6 +214,7 @@ pub fn command_specs() -> &'static [CommandSpec] {
         v.extend(states::specs());
         v.extend(transitions::specs());
         v.extend(path_type::specs());
+        v.extend(poem::specs());
         v.extend(qr::specs());
         v.extend(select::specs());
         v.extend(package::specs());

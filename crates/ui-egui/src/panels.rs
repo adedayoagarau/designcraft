@@ -11,6 +11,7 @@ pub mod layers;
 pub mod library;
 pub mod notes;
 pub mod pages;
+pub mod poem;
 pub mod properties;
 pub mod separations;
 pub mod story;

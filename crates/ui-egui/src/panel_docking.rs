@@ -119,7 +119,7 @@ const ICON_GROUPS: &[&[&str]] = &[
     &["character", "paragraph", "typography"],
     &["glyphs", "story"],
     &["table"],
-    &["textWrap"],
+    &["textWrap", "poem"],
     &["align", "pathfinder"],
     &["flexLayout", "liquid"],
     &["links", "library"],

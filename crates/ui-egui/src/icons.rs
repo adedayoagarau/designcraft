@@ -389,6 +389,12 @@ fn paint_panels(pen: &mut Pen, name: &str) -> bool {
             pen.rect(8.0, 6.0, 12.0, 16.0);
             pen.line(&[(13.0, 6.5), (17.0, 5.0), (17.5, 15.5), (13.5, 16.5)]);
         }
+        "panel-poem" => {
+            // A line of text bowed into an arc, over two straight lines.
+            pen.line(&[(3.0, 10.0), (5.0, 7.0), (8.0, 5.2), (12.0, 5.2), (15.0, 7.0), (17.0, 10.0)]);
+            pen.line(&[(5.0, 13.5), (15.0, 13.5)]);
+            pen.line(&[(7.0, 16.5), (13.0, 16.5)]);
+        }
         "panel-notes" => {
             // A note with a folded corner.
             pen.closed(&[(4.0, 3.0), (16.0, 3.0), (16.0, 13.0), (12.0, 17.0), (4.0, 17.0)]);

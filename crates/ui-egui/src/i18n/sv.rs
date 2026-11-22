@@ -117,6 +117,7 @@ pub(super) const TABLE: &[(&str, &str)] = &[
     ("Size", "Storlek"),
     ("Character", "Tecken"),
     ("Paragraph", "Stycke"),
+    ("Poem", "Dikt"),
     ("Paragraph Styles", "Styckestilar"),
     ("Character Styles", "Teckenstilar"),
     ("Paragraph Style Options", "Alternativ för styckestil"),

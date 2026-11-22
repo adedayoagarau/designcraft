@@ -596,7 +596,13 @@ pub fn apply(ctx: &egui::Context, t: &Tokens) {
     v.window_corner_radius = CornerRadius::same(4);
     v.menu_corner_radius = CornerRadius::same(4);
     v.selection.bg_fill = t.accent_strong;
-    v.selection.stroke = Stroke::new(1.0, t.text_strong);
+    // Missa: the light theme's accent is a dark green, so text on a selection turns white there
+    // instead of staying dark; each theme keeps whichever of the two reads better.
+    let fill_luma = {
+        let [r, g, b, _] = t.accent_strong.to_array();
+        0.2126 * f32::from(r) + 0.7152 * f32::from(g) + 0.0722 * f32::from(b)
+    };
+    v.selection.stroke = Stroke::new(1.0, if fill_luma < 110.0 { Color32::WHITE } else { t.text_strong });
     v.hyperlink_color = t.accent;
     v.override_text_color = Some(t.text);
     craft_ui::theme::WidgetPalette { noninteractive: t.panel, inactive: t.button, hovered: t.hover, active: t.tool_active, open: t.hover }.apply_to(

@@ -1,6 +1,6 @@
 //! The browser shell: web `Services`, drag-and-drop, and the eframe web runner.
 
-use super::browser_policy::{has_query_flag, mime_for};
+use super::browser_policy::{has_query_flag, mime_for, open_path};
 use crate::graphics::{GraphicsState, RecoveryDocument, recovery_documents};
 use designcraft_engine::Session;
 use designcraft_ui_egui::{DesignApp, ImportRequest, ImportedFile, Inbox, Services};
@@ -75,6 +75,26 @@ pub fn start() {
                     let mut app = DesignApp::new(Session::new(), services(inbox.clone(), cc.egui_ctx.clone()));
                     if has_query_flag(&query(), "sample") {
                         let _ = app.run("file.newSample", serde_json::json!({}));
+                    }
+                    // Missa: `?open=` loads the issue straight away, so the start screen only
+                    // shows while it downloads, or with the reason it couldn't.
+                    if let Some((path, name)) = open_path(&query()) {
+                        let request = app.import_request("open");
+                        let open_inbox = inbox.clone();
+                        let ctx = cc.egui_ctx.clone();
+                        let errors: std::sync::Arc<std::sync::Mutex<Vec<String>>> = Default::default();
+                        let read_errors = errors.clone();
+                        wasm_bindgen_futures::spawn_local(async move {
+                            match fetch_bytes(&path).await {
+                                Ok(bytes) => open_inbox.lock().unwrap_or_else(|e| e.into_inner()).push(ImportedFile { request, name, bytes }),
+                                Err(error) => {
+                                    log::error!("{error}");
+                                    read_errors.lock().unwrap_or_else(|e| e.into_inner()).push(format!("Couldn't open {name}: {error}"));
+                                }
+                            }
+                            ctx.request_repaint();
+                        });
+                        return Ok(Box::new(WebShell { app, inbox, read_errors: errors, graphics: creator_graphics }));
                     }
                     Ok(Box::new(WebShell { app, inbox, read_errors: Default::default(), graphics: creator_graphics }))
                 }),
@@ -333,6 +353,23 @@ fn add_document_recovery_controls(snapshots: Vec<RecoveryDocument>) -> Result<bo
     // The inserted element's id also prevents duplicate buttons on repeated loss notifications.
     actions.insert_before(&documents, actions.first_child().as_ref())?;
     Ok(true)
+}
+
+/// Fetch a same-origin file with the page's own sign-in (cookies), refusing any non-2xx reply.
+async fn fetch_bytes(path: &str) -> Result<Vec<u8>, String> {
+    let window = web_sys::window().ok_or("no window")?;
+    let init = web_sys::RequestInit::new();
+    init.set_credentials(web_sys::RequestCredentials::SameOrigin);
+    let response = wasm_bindgen_futures::JsFuture::from(window.fetch_with_str_and_init(path, &init))
+        .await
+        .map_err(|e| format!("network error ({e:?})"))?;
+    let response: web_sys::Response = response.dyn_into().map_err(|_| "unexpected reply".to_string())?;
+    if !response.ok() {
+        return Err(format!("the server answered {}", response.status()));
+    }
+    let buffer = response.array_buffer().map_err(|e| format!("couldn't read the reply ({e:?})"))?;
+    let buffer = wasm_bindgen_futures::JsFuture::from(buffer).await.map_err(|e| format!("couldn't read the reply ({e:?})"))?;
+    Ok(js_sys::Uint8Array::new(&buffer).to_vec())
 }
 
 fn query() -> String {

@@ -1,6 +1,6 @@
 //! The browser shell: web `Services`, drag-and-drop, and the eframe web runner.
 
-use super::browser_policy::{has_query_flag, mime_for};
+use super::browser_policy::{has_query_flag, mime_for, open_path};
 use crate::graphics::{GraphicsState, RecoveryDocument, recovery_documents};
 use designcraft_engine::Session;
 use designcraft_ui_egui::{DesignApp, ImportRequest, ImportedFile, Inbox, Services};
@@ -41,13 +41,13 @@ pub fn start() {
         if let Err(e) = create_error_panel(&document) {
             log::error!("couldn't create graphics error panel: {e:?}");
             if let Some(el) = document.get_element_by_id(LOADING_ID) {
-                el.set_text_content(Some("DesignCraft couldn't start. Reload this page to try again."));
+                el.set_text_content(Some("The editor couldn't start. Reload this page to try again."));
             }
             return;
         }
         let graphics = GraphicsState::default();
         let Some(canvas) = document.get_element_by_id(CANVAS_ID).and_then(|e| e.dyn_into::<web_sys::HtmlCanvasElement>().ok()) else {
-            graphics_failed(&graphics, "DesignCraft failed to start", "Reload this page to try again.", &format!("Missing canvas {CANVAS_ID}."));
+            graphics_failed(&graphics, "The editor couldn't start", "Reload this page to try again.", &format!("Missing canvas {CANVAS_ID}."));
             return;
         };
         let mut options = eframe::WebOptions::default();
@@ -76,6 +76,26 @@ pub fn start() {
                     if has_query_flag(&query(), "sample") {
                         let _ = app.run("file.newSample", serde_json::json!({}));
                     }
+                    // Missa: `?open=` loads the issue straight away, so the start screen only
+                    // shows while it downloads, or with the reason it couldn't.
+                    if let Some((path, name)) = open_path(&query()) {
+                        let request = app.import_request("open");
+                        let open_inbox = inbox.clone();
+                        let ctx = cc.egui_ctx.clone();
+                        let errors: std::sync::Arc<std::sync::Mutex<Vec<String>>> = Default::default();
+                        let read_errors = errors.clone();
+                        wasm_bindgen_futures::spawn_local(async move {
+                            match fetch_bytes(&path).await {
+                                Ok(bytes) => open_inbox.lock().unwrap_or_else(|e| e.into_inner()).push(ImportedFile { request, name, bytes }),
+                                Err(error) => {
+                                    log::error!("{error}");
+                                    read_errors.lock().unwrap_or_else(|e| e.into_inner()).push(format!("Couldn't open {name}: {error}"));
+                                }
+                            }
+                            ctx.request_repaint();
+                        });
+                        return Ok(Box::new(WebShell { app, inbox, read_errors: errors, graphics: creator_graphics }));
+                    }
                     Ok(Box::new(WebShell { app, inbox, read_errors: Default::default(), graphics: creator_graphics }))
                 }),
             )
@@ -100,7 +120,7 @@ pub fn start() {
             Err(e) => {
                 graphics_failed(
                     &graphics,
-                    "DesignCraft failed to start",
+                    "The editor couldn't start",
                     "Reload this page to try again. A browser with WebGPU or WebGL2 is required.",
                     &format!("{e:?}"),
                 );
@@ -335,6 +355,23 @@ fn add_document_recovery_controls(snapshots: Vec<RecoveryDocument>) -> Result<bo
     Ok(true)
 }
 
+/// Fetch a same-origin file with the page's own sign-in (cookies), refusing any non-2xx reply.
+async fn fetch_bytes(path: &str) -> Result<Vec<u8>, String> {
+    let window = web_sys::window().ok_or("no window")?;
+    let init = web_sys::RequestInit::new();
+    init.set_credentials(web_sys::RequestCredentials::SameOrigin);
+    let response = wasm_bindgen_futures::JsFuture::from(window.fetch_with_str_and_init(path, &init))
+        .await
+        .map_err(|e| format!("network error ({e:?})"))?;
+    let response: web_sys::Response = response.dyn_into().map_err(|_| "unexpected reply".to_string())?;
+    if !response.ok() {
+        return Err(format!("the server answered {}", response.status()));
+    }
+    let buffer = response.array_buffer().map_err(|e| format!("couldn't read the reply ({e:?})"))?;
+    let buffer = wasm_bindgen_futures::JsFuture::from(buffer).await.map_err(|e| format!("couldn't read the reply ({e:?})"))?;
+    Ok(js_sys::Uint8Array::new(&buffer).to_vec())
+}
+
 fn query() -> String {
     web_sys::window().and_then(|w| w.location().search().ok()).unwrap_or_default()
 }
@@ -421,7 +458,7 @@ fn services(inbox: Inbox, ctx: egui::Context) -> Services {
             } else if request.purpose == "place" {
                 rfd::AsyncFileDialog::new().add_filter("Graphics", IMAGE_EXTS)
             } else {
-                rfd::AsyncFileDialog::new().add_filter("DesignCraft, IDML or InDesign", DOC_EXTS)
+                rfd::AsyncFileDialog::new().add_filter("Missa, IDML or InDesign", DOC_EXTS)
             };
             wasm_bindgen_futures::spawn_local(async move {
                 // Place takes several files, loaded into the place cursor in the order chosen.

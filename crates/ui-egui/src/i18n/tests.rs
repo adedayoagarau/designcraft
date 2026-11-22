@@ -136,7 +136,8 @@ fn hungarian_catalog_glyphs_exist_in_the_bundled_ui_fonts() {
         ("ui-semibold", "Source Sans 3", "Semibold", egui::FontFamily::Name("semibold".into())),
         ("mono", "JetBrains Mono", "Regular", egui::FontFamily::Monospace),
     ] {
-        assert_eq!(definitions.families[&ui_family].first().map(String::as_str), Some(name));
+        // Missa leads with Instrument Sans; this face must stay in the stack to draw these letters.
+        assert!(definitions.families[&ui_family].iter().any(|n| n == name), "{name} missing from the {ui_family:?} stack");
         let face = db.face(family, style);
         assert_eq!(face.data(), definitions.font_data[name].bytes(), "configured UI face {name}");
         for letter in &letters {

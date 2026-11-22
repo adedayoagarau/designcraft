@@ -8,9 +8,9 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Brightness {
     Dark,
-    #[default]
     MediumDark,
     MediumLight,
+    #[default]
     Light,
     /// Accessibility: black chrome, white text, yellow selection and focus.
     HighContrast,
@@ -202,34 +202,38 @@ impl Tokens {
                 tab_strip: hex(0xa6a6a6),
                 ..dark
             },
+            // Missa: warm light greys, Forest accent, rounder corners.
             Brightness::Light => Tokens {
                 dark: false,
-                app_bar: hex(0xe4e4e4),
-                panel: hex(0xf0f0f0),
-                panel_darker: hex(0xe2e2e2),
+                app_bar: hex(0xffffff),
+                panel: hex(0xfafaf9),
+                panel_darker: hex(0xf1f1ef),
                 input: hex(0xffffff),
-                input_border: hex(0xb4b4b4),
-                divider: hex(0xd0d0d0),
-                text: hex(0x1e1e1e),
-                text_strong: hex(0x000000),
-                text_dim: hex(0x555555),
-                text_disabled: hex(0x9a9a9a),
-                icon: hex(0x2c2c2c),
-                hover: hex(0xdddddd),
-                tool_active: hex(0xcfcfcf),
-                row_selected: hex(0xc4dbf7),
-                pasteboard: hex(0xd4d4d4),
-                ruler: hex(0xf2f2f2),
-                ruler_tick: hex(0x4a4a4a),
-                tab_inactive: hex(0xdcdcdc),
-                button: hex(0xf0f0f0),
-                border: hex(0xc4c4c4),
-                field_border: hex(0xa8a8a8),
-                well: hex(0xcfcfcf),
-                well_rim: hex(0xbdbdbd),
-                ruler_text: hex(0x1e1e1e),
-                section_divider: hex(0xd0d0d0),
-                tab_strip: hex(0xe2e2e2),
+                input_border: hex(0xd4d3d0),
+                divider: hex(0xe7e7e5),
+                text: hex(0x171418),
+                text_strong: hex(0x171418),
+                text_dim: hex(0x6d6670),
+                text_disabled: hex(0xa9a6a3),
+                icon: hex(0x3b373d),
+                hover: hex(0xefefed),
+                tool_active: hex(0xe8efec),
+                accent: hex(0x285649),
+                accent_strong: hex(0x1f4439),
+                row_selected: hex(0xe8efec),
+                pasteboard: hex(0xf1f1ef),
+                ruler: hex(0xfafaf9),
+                ruler_tick: hex(0x8a8590),
+                tab_inactive: hex(0xf1f1ef),
+                button: hex(0xffffff),
+                radius: 6,
+                border: hex(0xe7e7e5),
+                field_border: hex(0xd4d3d0),
+                well: hex(0xe8efec),
+                well_rim: hex(0xc9d8d2),
+                ruler_text: hex(0x6d6670),
+                section_divider: hex(0xe7e7e5),
+                tab_strip: hex(0xfafaf9),
                 ..dark
             },
             Brightness::HighContrast => Tokens {
@@ -417,7 +421,8 @@ fn installed_ui_fonts(db: &designcraft_fonts::FontDb, craft: &[designcraft_fonts
     faces
 }
 
-/// The UI face every family starts with (Source Sans 3; the semibold shares its line metrics).
+/// The face whose line metrics the interface is measured by (Source Sans 3; the semibold shares them).
+/// Missa leads with Instrument Sans, tweaked onto this baseline.
 const UI_FONT: &[u8] = include_bytes!("../../../assets/fonts/SourceSans3-Regular.ttf");
 
 /// The tweak that puts a fallback face's baseline on the UI face's. egui centres a fallback's
@@ -497,12 +502,24 @@ pub(crate) fn font_definitions(craft: &'static [designcraft_fonts::CraftFont], l
     // the requested face and the script faces (☰, ⚠, 📋) is not tofu. Captured before the
     // interface face is added.
     let last_resort: Vec<String> = fonts.families.get(&FontFamily::Proportional).cloned().unwrap_or_default();
+    // Missa: Instrument Sans leads; Source Sans 3 stays right behind it for every script
+    // Instrument Sans does not cover (Cyrillic, Greek, Vietnamese and more).
+    // The Instrument Sans files carry Source Sans 3's line metrics (ascent 1000, descent 326 per
+    // 1000), so rows and baselines keep the places the interface was laid out for.
+    for (name, data) in [
+        ("brand", include_bytes!("../../../assets/fonts/InstrumentSans-Regular.ttf").as_slice()),
+        ("brand-semibold", include_bytes!("../../../assets/fonts/InstrumentSans-SemiBold.ttf").as_slice()),
+    ] {
+        fonts.font_data.insert(name.into(), Arc::new(FontData { tweak: baseline_tweak(data, 0), ..FontData::from_static(data) }));
+    }
     add(&mut fonts, "ui", include_bytes!("../../../assets/fonts/SourceSans3-Regular.ttf"));
     add(&mut fonts, "ui-semibold", include_bytes!("../../../assets/fonts/SourceSans3-Semibold.ttf"));
     add(&mut fonts, "mono", include_bytes!("../../../assets/fonts/JetBrainsMono-Regular.ttf"));
-    fonts.families.entry(FontFamily::Proportional).or_default().insert(0, "ui".into());
+    let proportional = fonts.families.entry(FontFamily::Proportional).or_default();
+    proportional.insert(0, "ui".into());
+    proportional.insert(0, "brand".into());
     fonts.families.entry(FontFamily::Monospace).or_default().insert(0, "mono".into());
-    fonts.families.insert(FontFamily::Name("semibold".into()), vec!["ui-semibold".into(), "ui".into()]);
+    fonts.families.insert(FontFamily::Name("semibold".into()), vec!["brand-semibold".into(), "ui-semibold".into(), "ui".into()]);
     let pick = |script: &str| -> Vec<&designcraft_fonts::CraftFont> { craft.iter().filter(|f| f.scripts.contains(&script)).collect() };
     let mut japanese = pick("Jpan");
     // BIZ UDPGothic (the UI face) first, Regular before Bold; the semibold family prefers Bold.
@@ -579,7 +596,13 @@ pub fn apply(ctx: &egui::Context, t: &Tokens) {
     v.window_corner_radius = CornerRadius::same(4);
     v.menu_corner_radius = CornerRadius::same(4);
     v.selection.bg_fill = t.accent_strong;
-    v.selection.stroke = Stroke::new(1.0, t.text_strong);
+    // Missa: the light theme's accent is a dark green, so text on a selection turns white there
+    // instead of staying dark; each theme keeps whichever of the two reads better.
+    let fill_luma = {
+        let [r, g, b, _] = t.accent_strong.to_array();
+        0.2126 * f32::from(r) + 0.7152 * f32::from(g) + 0.0722 * f32::from(b)
+    };
+    v.selection.stroke = Stroke::new(1.0, if fill_luma < 110.0 { Color32::WHITE } else { t.text_strong });
     v.hyperlink_color = t.accent;
     v.override_text_color = Some(t.text);
     craft_ui::theme::WidgetPalette { noninteractive: t.panel, inactive: t.button, hovered: t.hover, active: t.tool_active, open: t.hover }.apply_to(
@@ -825,8 +848,8 @@ mod japanese_font_tests {
             for family in ["arabic", "arabic-semibold"] {
                 assert_eq!(defs.families[&egui::FontFamily::Name(family.into())][0], "system-Noto Sans Arabic");
             }
-            assert_eq!(defs.families[&egui::FontFamily::Proportional][0], "ui");
-            assert_eq!(defs.families[&egui::FontFamily::Name("semibold".into())][0], "ui-semibold");
+            assert_eq!(defs.families[&egui::FontFamily::Proportional][0], "brand");
+            assert_eq!(defs.families[&egui::FontFamily::Name("semibold".into())][0], "brand-semibold");
             let ctx = egui::Context::default();
             ctx.set_fonts(defs);
             let mut output = ctx.run_ui(egui::RawInput::default(), |_| {});
@@ -877,7 +900,7 @@ mod japanese_font_tests {
             assert_eq!(stack.iter().filter(|n| *n == "system-Tahoma").count(), 1);
         }
         assert!(std::sync::Arc::ptr_eq(&defs.font_data["system-Tahoma"], &system[0].data));
-        assert_eq!(defs.families[&egui::FontFamily::Proportional][0], "ui");
+        assert_eq!(defs.families[&egui::FontFamily::Proportional][0], "brand");
         let mut defs = super::font_definitions(craft, "ar");
         super::add_system_fallbacks(&mut defs, &with_craft, "ar");
         for family in ["arabic", "arabic-semibold"] {

@@ -4,6 +4,9 @@ use serde_json::{Value, json};
 
 use crate::{DesignApp, ScreenMode};
 
+/// Missa: where Help › Missa Help… and About send people.
+pub(crate) const MISSA_HELP_URL: &str = "https://www.usemissa.com/help";
+
 mod bar;
 mod context;
 mod export;

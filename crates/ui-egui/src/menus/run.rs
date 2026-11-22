@@ -1127,6 +1127,12 @@ fn run_ui_part5(app: &mut DesignApp, id: &str, p: &Value) -> Option<Result<Value
             Ok(json!(app.ui.about))
         }
         "help.checkForUpdates" => crate::updates_ui::check(app),
+        // Missa: its own help pages.
+        "help.missa" => {
+            let url = super::MISSA_HELP_URL.to_string();
+            app.ui.pending_urls.push(url.clone());
+            Ok(json!({"url": url}))
+        }
         "help.app" => match p.get("app").and_then(Value::as_str) {
             Some(slug) if !slug.is_empty() && slug.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') => {
                 let url = format!("{}/apps/{slug}", designcraft_engine::links::WEBSITE);

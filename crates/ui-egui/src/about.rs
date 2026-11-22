@@ -1,6 +1,6 @@
-//! Help › About DesignCraft: tabs About · Contributors · Models. About is the splash with the
-//! ArtCraft mark, version, and community links (Discord first and largest), plus the other ArtCraft
-//! apps; Contributors and Models are the compiled-in credits (`crate::credits`).
+//! Help › About Missa: tabs About · Contributors · Models. About names Missa, its version, the
+//! "Powered by DesignCraft" credit and Missa's help links; Contributors and Models are the
+//! compiled-in credits (`crate::credits`).
 
 use designcraft_engine::links;
 use egui::{Color32, Rect, Sense, Stroke, pos2, vec2};
@@ -155,88 +155,27 @@ pub fn show(app: &mut DesignApp, ctx: &egui::Context) {
         }
         ui.vertical_centered(|ui| {
             ui.add_space(8.0);
-            let (r, _) = ui.allocate_exact_size(vec2(72.0, 72.0), Sense::hover());
-            paint_mark(ui, r, BRAND);
-            ui.add_space(6.0);
-            ui.label(crate::rtl::widget(
-                ui,
-                egui::RichText::new(crate::i18n::tr(&app.ui.language, "DesignCraft")).font(semibold(26.0)).color(t.text_strong),
-            ));
+            ui.label(crate::rtl::widget(ui, egui::RichText::new("Missa").font(semibold(26.0)).color(t.text_strong)));
             crate::rtl::label(
                 ui,
                 egui::RichText::new(format!("{} {}", crate::i18n::tr(&app.ui.language, "Version"), env!("CARGO_PKG_VERSION")))
                     .size(12.0)
                     .color(t.text_dim),
             );
-            ui.add_space(4.0);
-            ui.label(crate::rtl::widget(
-                ui,
-                egui::RichText::new(crate::i18n::tr(&app.ui.language, "Page layout for print and screen — fast, open and scriptable."))
-                    .size(13.0)
-                    .color(t.text),
-            ));
-            ui.label(crate::rtl::widget(
-                ui,
-                egui::RichText::new(crate::i18n::tr(&app.ui.language, "Part of the ArtCraft suite of open creative tools."))
-                    .size(12.0)
-                    .color(t.text_dim),
-            ));
-            ui.add_space(16.0);
-            if discord_button(ui, crate::i18n::tr(&app.ui.language, "Join the ArtCraft Discord"), vec2(300.0, 40.0)) {
-                open = Some("discord");
+            ui.add_space(10.0);
+            // Missa: the one credit to DesignCraft, linking to its source.
+            if link(ui, crate::i18n::tr(&app.ui.language, "Powered by DesignCraft"), links::get("github").unwrap_or_default(), t.accent) {
+                open = Some("github");
             }
-            ui.add_space(4.0);
-            ui.label(crate::rtl::widget(
-                ui,
-                egui::RichText::new(crate::i18n::tr(&app.ui.language, "discord.gg/artcraft — help, feedback and show-and-tell"))
-                    .size(11.0)
-                    .color(t.text_dim),
-            ));
             ui.add_space(14.0);
             ui.horizontal(|ui| {
                 // Centre the row of links.
-                let w = 330.0;
+                let w = 80.0;
                 ui.add_space(((ui.available_width() - w) / 2.0).max(0.0));
-                for (text, key) in
-                    [("DesignCraft page", "appPage"), ("GitHub", "github"), ("getartcraft.com", "website"), ("Report an issue", "issues")]
-                {
-                    if link(ui, crate::i18n::tr(&app.ui.language, text), links::get(key).unwrap_or_default(), t.accent) {
-                        open = Some(key);
-                    }
-                    ui.add_space(6.0);
+                if link(ui, crate::i18n::tr(&app.ui.language, "Missa Help"), crate::menus::MISSA_HELP_URL, t.accent) {
+                    open = Some("missa");
                 }
             });
-            ui.add_space(16.0);
-            ui.separator();
-            ui.add_space(6.0);
-            ui.label(crate::rtl::widget(
-                ui,
-                egui::RichText::new(crate::i18n::tr(&app.ui.language, "More ArtCraft apps")).font(semibold(12.0)).color(t.text_strong),
-            ));
-            ui.add_space(4.0);
-            ui.horizontal(|ui| {
-                let pad = ui.spacing().button_padding.x * 2.0 + ui.spacing().item_spacing.x;
-                let w: f32 = SIBLINGS
-                    .iter()
-                    .map(|(_, n, _)| ui.painter().layout_no_wrap(n.to_string(), egui::FontId::proportional(12.0), Color32::WHITE).size().x + pad)
-                    .sum::<f32>()
-                    - ui.spacing().item_spacing.x;
-                ui.add_space(((ui.available_width() - w) / 2.0).max(0.0));
-                for (slug, name, what) in SIBLINGS {
-                    let url = format!("{}/apps/{slug}", links::WEBSITE);
-                    let b = ui
-                        .add(egui::Button::new(egui::RichText::new(*name).size(12.0)).corner_radius(10.0))
-                        .on_hover_text(format!("{} — {url}", crate::i18n::tr(&app.ui.language, what)));
-                    if b.clicked() {
-                        app.ui.pending_urls.push(url);
-                    }
-                }
-            });
-            ui.add_space(12.0);
-            ui.label(crate::rtl::widget(
-                ui,
-                egui::RichText::new(crate::i18n::tr(&app.ui.language, "Open source. No telemetry.")).size(11.0).color(t.text_dim),
-            ));
             ui.add_space(8.0);
             if ui.button(crate::rtl::widget(ui, crate::i18n::tr(&app.ui.language, "  Close  "))).clicked() {
                 app.ui.about = false;

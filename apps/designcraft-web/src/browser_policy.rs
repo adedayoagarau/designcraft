@@ -7,6 +7,24 @@ pub(crate) fn has_query_flag(query: &str, flag: &str) -> bool {
     form_urlencoded::parse(query.as_bytes()).any(|(key, _)| key == flag)
 }
 
+/// Missa: the document named by `?open=`, when it is a same-origin path to a file the editor
+/// opens (`/organization/x/issues/3/design/file.idml`). Anything else, including another host
+/// (`https://…`, `//host/…`, `/\\host/…`) or a page without a document extension, is refused, so
+/// a link can never make the editor fetch from somewhere the signed-in page doesn't own.
+/// Returns the path to fetch and the file name to open it under.
+pub(crate) fn open_path(query: &str) -> Option<(String, String)> {
+    let query = query.strip_prefix('?').unwrap_or(query);
+    let (_, path) = form_urlencoded::parse(query.as_bytes()).find(|(key, _)| key == "open")?;
+    let path = path.into_owned();
+    if !path.starts_with('/') || path.starts_with("//") || path.contains('\\') || path.chars().any(char::is_control) {
+        return None;
+    }
+    let file_part = path.split(['?', '#']).next()?;
+    let name = file_part.rsplit('/').next().filter(|n| !n.is_empty())?.to_string();
+    let ext = name.rsplit_once('.').map(|(_, e)| e.to_ascii_lowercase())?;
+    matches!(ext.as_str(), "designcraft" | "idml").then_some((path, name))
+}
+
 pub(crate) fn mime_for(name: &str) -> &'static str {
     match name.rsplit('.').next().map(str::to_ascii_lowercase).as_deref() {
         Some("png") => "image/png",
@@ -20,7 +38,27 @@ pub(crate) fn mime_for(name: &str) -> &'static str {
 
 #[cfg(test)]
 mod tests {
-    use super::{has_query_flag, mime_for};
+    use super::{has_query_flag, mime_for, open_path};
+
+    #[test]
+    fn open_takes_only_same_origin_document_paths() {
+        let (path, name) = open_path("?open=%2Forganization%2Flolwe%2Fissues%2F3%2Fdesign%2Fissue-3.idml").unwrap_or_default();
+        assert!(path.starts_with("/organization/") && name == "issue-3.idml", "{path} {name}");
+        assert!(open_path("?open=/files/a.designcraft%3Fv%3D2").is_some_and(|(_, n)| n == "a.designcraft"));
+        for refused in [
+            "",
+            "?sample",
+            "?open=https://evil.example/a.idml",
+            "?open=//evil.example/a.idml",
+            "?open=/%5Cevil.example/a.idml",
+            "?open=/files/page.html",
+            "?open=/files/",
+            "?open=files/a.idml",
+            "?open=/files/a.idml%0A",
+        ] {
+            assert!(open_path(refused).is_none(), "{refused}");
+        }
+    }
 
     #[test]
     fn startup_flags_match_complete_decoded_keys() {

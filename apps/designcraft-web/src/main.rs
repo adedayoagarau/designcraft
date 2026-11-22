@@ -21,6 +21,9 @@
 #[cfg(any(target_arch = "wasm32", test))]
 mod browser_policy;
 
+#[cfg(any(target_arch = "wasm32", test))]
+mod missa_fonts;
+
 #[cfg(target_arch = "wasm32")]
 mod web;
 

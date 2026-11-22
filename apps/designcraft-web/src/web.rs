@@ -86,7 +86,10 @@ pub fn start() {
                         let read_errors = errors.clone();
                         wasm_bindgen_futures::spawn_local(async move {
                             match fetch_bytes(&path).await {
-                                Ok(bytes) => open_inbox.lock().unwrap_or_else(|e| e.into_inner()).push(ImportedFile { request, name, bytes }),
+                                Ok(bytes) => {
+                                    load_missa_fonts(&name, &bytes).await;
+                                    open_inbox.lock().unwrap_or_else(|e| e.into_inner()).push(ImportedFile { request, name, bytes });
+                                }
                                 Err(error) => {
                                     log::error!("{error}");
                                     read_errors.lock().unwrap_or_else(|e| e.into_inner()).push(format!("Couldn't open {name}: {error}"));
@@ -356,6 +359,33 @@ fn add_document_recovery_controls(snapshots: Vec<RecoveryDocument>) -> Result<bo
 }
 
 /// Fetch a same-origin file with the page's own sign-in (cookies), refusing any non-2xx reply.
+/// Missa: before a document from Missa opens, add the typefaces it uses that the editor lacks,
+/// from Missa's copies at `fonts/` beside the editor. A face that can't be fetched is left out,
+/// and the Missing Fonts dialog names it when the document opens.
+async fn load_missa_fonts(name: &str, bytes: &[u8]) {
+    let families = crate::missa_fonts::missing_families(name, bytes);
+    if families.is_empty() {
+        return;
+    }
+    let manifest = match fetch_bytes("fonts/manifest.json").await {
+        Ok(manifest) => serde_json::from_slice(&manifest).unwrap_or(serde_json::Value::Null),
+        Err(error) => {
+            log::warn!("Couldn't read Missa's typefaces: {error}");
+            return;
+        }
+    };
+    for file in crate::missa_fonts::files_for(&manifest, &families) {
+        match fetch_bytes(&format!("fonts/{file}")).await {
+            Ok(font) => {
+                if designcraft_fonts::FontDb::global().add_font(font) == 0 {
+                    log::warn!("{file} isn't a typeface the editor can read");
+                }
+            }
+            Err(error) => log::warn!("Couldn't load {file}: {error}"),
+        }
+    }
+}
+
 async fn fetch_bytes(path: &str) -> Result<Vec<u8>, String> {
     let window = web_sys::window().ok_or("no window")?;
     let init = web_sys::RequestInit::new();

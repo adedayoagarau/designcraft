@@ -25,6 +25,9 @@ Generated-in-code art is original and has no file to list: the UI icon set (`cra
 | `assets/fonts/Inter-SemiBold.ttf` | Rasmus Andersson / The Inter Project Authors | https://github.com/rsms/inter | OFL-1.1 (`assets/fonts/OFL-Inter.txt`) | Open-source typeface |
 | `assets/fonts/JetBrainsMono-Regular.ttf` | The JetBrains Mono Project Authors | https://github.com/JetBrains/JetBrainsMono | OFL-1.1 (`assets/fonts/OFL-JetBrainsMono.txt`) | Open-source typeface |
 | `assets/fonts/OFL-Inter.txt` | (licence text) | upstream project | — |  |
+| `assets/fonts/OFL-InstrumentSans.txt` | (licence text) | upstream project | — |  |
+| `assets/fonts/InstrumentSans-Regular.ttf` | The Instrument Sans Project Authors | https://github.com/Instrument/instrument-sans | OFL-1.1 (`assets/fonts/OFL-InstrumentSans.txt`) | Missa fork: interface face. Static 400 instance of the Latin variable web font Missa serves, made with fontTools instancer; Source Sans 3 covers other scripts |
+| `assets/fonts/InstrumentSans-SemiBold.ttf` | The Instrument Sans Project Authors | https://github.com/Instrument/instrument-sans | OFL-1.1 (`assets/fonts/OFL-InstrumentSans.txt`) | Missa fork: semibold interface face. Static 600 instance, made the same way |
 | `assets/fonts/OFL-JetBrainsMono.txt` | (licence text) | upstream project | — |  |
 | `assets/fonts/OFL-SourceSans3.txt` | (licence text) | upstream project | — |  |
 | `assets/fonts/OFL-SourceSerif4.txt` | (licence text) | upstream project | — |  |

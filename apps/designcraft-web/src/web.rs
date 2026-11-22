@@ -1,6 +1,6 @@
 //! The browser shell: web `Services`, drag-and-drop, and the eframe web runner.
 
-use super::browser_policy::{has_query_flag, mime_for, open_path};
+use super::browser_policy::{has_query_flag, mime_for, open_path, save_path};
 use crate::graphics::{GraphicsState, RecoveryDocument, recovery_documents};
 use designcraft_engine::Session;
 use designcraft_ui_egui::{DesignApp, ImportRequest, ImportedFile, Inbox, Services};
@@ -72,17 +72,20 @@ pub fn start() {
                         });
                     }
                     let inbox: Inbox = Inbox::default();
-                    let mut app = DesignApp::new(Session::new(), services(inbox.clone(), cc.egui_ctx.clone()));
+                    let errors: std::sync::Arc<std::sync::Mutex<Vec<String>>> = Default::default();
+                    let opened = open_path(&query());
+                    // Missa: a document opened from Missa saves back to it, not to the downloads.
+                    let save_to = opened.as_ref().and_then(|(path, _)| save_path(path));
+                    let mut app = DesignApp::new(Session::new(), services(inbox.clone(), cc.egui_ctx.clone(), save_to, errors.clone()));
                     if has_query_flag(&query(), "sample") {
                         let _ = app.run("file.newSample", serde_json::json!({}));
                     }
                     // Missa: `?open=` loads the issue straight away, so the start screen only
                     // shows while it downloads, or with the reason it couldn't.
-                    if let Some((path, name)) = open_path(&query()) {
+                    if let Some((path, name)) = opened {
                         let request = app.import_request("open");
                         let open_inbox = inbox.clone();
                         let ctx = cc.egui_ctx.clone();
-                        let errors: std::sync::Arc<std::sync::Mutex<Vec<String>>> = Default::default();
                         let read_errors = errors.clone();
                         wasm_bindgen_futures::spawn_local(async move {
                             match fetch_bytes(&path).await {
@@ -94,9 +97,11 @@ pub fn start() {
                             }
                             ctx.request_repaint();
                         });
-                        return Ok(Box::new(WebShell { app, inbox, read_errors: errors, graphics: creator_graphics }));
+                        // `fit`: a first layout from Missa. Once it opens, its pages follow its text.
+                        let fit_pending = has_query_flag(&query(), "fit");
+                        return Ok(Box::new(WebShell { app, inbox, read_errors: errors, graphics: creator_graphics, fit_pending }));
                     }
-                    Ok(Box::new(WebShell { app, inbox, read_errors: Default::default(), graphics: creator_graphics }))
+                    Ok(Box::new(WebShell { app, inbox, read_errors: errors, graphics: creator_graphics, fit_pending: false }))
                 }),
             )
             .await;
@@ -360,9 +365,8 @@ async fn fetch_bytes(path: &str) -> Result<Vec<u8>, String> {
     let window = web_sys::window().ok_or("no window")?;
     let init = web_sys::RequestInit::new();
     init.set_credentials(web_sys::RequestCredentials::SameOrigin);
-    let response = wasm_bindgen_futures::JsFuture::from(window.fetch_with_str_and_init(path, &init))
-        .await
-        .map_err(|e| format!("network error ({e:?})"))?;
+    let response =
+        wasm_bindgen_futures::JsFuture::from(window.fetch_with_str_and_init(path, &init)).await.map_err(|e| format!("network error ({e:?})"))?;
     let response: web_sys::Response = response.dyn_into().map_err(|_| "unexpected reply".to_string())?;
     if !response.ok() {
         return Err(format!("the server answered {}", response.status()));
@@ -370,6 +374,30 @@ async fn fetch_bytes(path: &str) -> Result<Vec<u8>, String> {
     let buffer = response.array_buffer().map_err(|e| format!("couldn't read the reply ({e:?})"))?;
     let buffer = wasm_bindgen_futures::JsFuture::from(buffer).await.map_err(|e| format!("couldn't read the reply ({e:?})"))?;
     Ok(js_sys::Uint8Array::new(&buffer).to_vec())
+}
+
+/// Missa: send a saved document back with the page's own sign-in. A refusal says why when the
+/// server explains (`{"error": …}`).
+async fn put_bytes(path: &str, bytes: &[u8]) -> Result<(), String> {
+    let window = web_sys::window().ok_or("no window")?;
+    let init = web_sys::RequestInit::new();
+    init.set_method("PUT");
+    init.set_credentials(web_sys::RequestCredentials::SameOrigin);
+    let body = js_sys::Uint8Array::from(bytes);
+    init.set_body(&body);
+    let response =
+        wasm_bindgen_futures::JsFuture::from(window.fetch_with_str_and_init(path, &init)).await.map_err(|_| "no connection".to_string())?;
+    let response: web_sys::Response = response.dyn_into().map_err(|_| "unexpected reply".to_string())?;
+    if response.ok() {
+        return Ok(());
+    }
+    let status = response.status();
+    let text = match response.text() {
+        Ok(p) => wasm_bindgen_futures::JsFuture::from(p).await.ok().and_then(|v| v.as_string()).unwrap_or_default(),
+        Err(_) => String::new(),
+    };
+    let reason = serde_json::from_str::<serde_json::Value>(&text).ok().and_then(|v| v.get("error").and_then(|e| e.as_str()).map(str::to_string));
+    Err(reason.unwrap_or_else(|| format!("the server answered {status}")))
 }
 
 fn query() -> String {
@@ -384,6 +412,31 @@ struct WebShell {
     /// Why a dropped file couldn't be read, for the status bar (the read finishes outside a frame).
     read_errors: std::sync::Arc<std::sync::Mutex<Vec<String>>>,
     graphics: GraphicsState,
+    /// Missa: fit the issue opened with `?fit` once it has opened.
+    fit_pending: bool,
+}
+
+/// Missa: a first layout comes with an estimate of its pages. Make its longest threaded story
+/// the primary story, so Smart Text Reflow adds the pages its text needs and removes empty ones,
+/// then bring the table of contents up to date with the pages the pieces start on.
+fn fit_issue(app: &mut DesignApp) {
+    let Some(st) = app.session.active() else { return };
+    let d = &st.doc;
+    let toc = d.toc.as_ref().map(|t| t.story);
+    let body = d.stories.values().filter(|s| Some(s.id) != toc).max_by_key(|s| (s.frames.len(), s.text.len()));
+    let Some(frame) = body.and_then(|s| s.frames.first().copied()) else { return };
+    let has_toc = toc.is_some();
+    let mut failed = Vec::new();
+    if let Err(e) = app.run("object.primaryTextFrame", serde_json::json!({"on": true, "ids": [frame.0]})) {
+        failed.push(e);
+    }
+    if has_toc && let Err(e) = app.run("toc.update", serde_json::json!({})) {
+        failed.push(e);
+    }
+    match failed.first() {
+        Some(e) => app.status(format!("Couldn’t fit the pages to the text: {e}")),
+        None => app.status("Pages fitted to the text. Contents updated."),
+    }
 }
 
 impl eframe::App for WebShell {
@@ -394,6 +447,10 @@ impl eframe::App for WebShell {
             self.app.status(error);
         }
         let _ = graphics.run_if_healthy(|| self.app.logic(ctx));
+        if self.fit_pending && self.app.session.active().is_some() {
+            self.fit_pending = false;
+            fit_issue(&mut self.app);
+        }
     }
 
     fn raw_input_hook(&mut self, ctx: &egui::Context, raw: &mut egui::RawInput) {
@@ -445,8 +502,31 @@ impl eframe::App for WebShell {
     }
 }
 
-fn services(inbox: Inbox, ctx: egui::Context) -> Services {
+fn services(inbox: Inbox, ctx: egui::Context, save_to: Option<String>, notices: std::sync::Arc<std::sync::Mutex<Vec<String>>>) -> Services {
     let open_inbox = inbox.clone();
+    let save_ctx = ctx.clone();
+    // Save hands the document over as `<title>.designcraft`; from Missa it goes back to Missa.
+    // Exports and other files still download.
+    let hand_over = move |name: &str, bytes: &[u8]| -> Result<(), String> {
+        let Some(target) = save_to.clone().filter(|_| name.to_ascii_lowercase().ends_with(".designcraft")) else {
+            return download(name, bytes);
+        };
+        let bytes = bytes.to_vec();
+        let notices = notices.clone();
+        let ctx = save_ctx.clone();
+        notices.lock().unwrap_or_else(|e| e.into_inner()).push("Saving to Missa…".into());
+        wasm_bindgen_futures::spawn_local(async move {
+            let message = match put_bytes(&target, &bytes).await {
+                Ok(()) => "Saved to Missa.".to_string(),
+                Err(e) => format!("Couldn’t save to Missa: {}. Your changes are still here. Save again to retry.", e.trim_end_matches('.')),
+            };
+            notices.lock().unwrap_or_else(|e| e.into_inner()).push(message);
+            ctx.request_repaint();
+        });
+        Ok(())
+    };
+    let save_download = std::rc::Rc::new(std::cell::RefCell::new(hand_over));
+    let write_download = save_download.clone();
     Services {
         open_async: Some(Box::new(move |request: ImportRequest| {
             let inbox = open_inbox.clone();
@@ -476,8 +556,8 @@ fn services(inbox: Inbox, ctx: egui::Context) -> Services {
                 ctx.request_repaint();
             });
         })),
-        write: Some(Box::new(|name: &str, bytes: &[u8]| download(name, bytes))),
-        download: Some(Box::new(|name: &str, bytes: &[u8]| download(name, bytes))),
+        write: Some(Box::new(move |name: &str, bytes: &[u8]| (write_download.borrow_mut())(name, bytes))),
+        download: Some(Box::new(move |name: &str, bytes: &[u8]| (save_download.borrow_mut())(name, bytes))),
         inbox: Some(inbox),
         ..Default::default()
     }

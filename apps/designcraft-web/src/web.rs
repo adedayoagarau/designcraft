@@ -458,7 +458,7 @@ fn services(inbox: Inbox, ctx: egui::Context) -> Services {
             } else if request.purpose == "place" {
                 rfd::AsyncFileDialog::new().add_filter("Graphics", IMAGE_EXTS)
             } else {
-                rfd::AsyncFileDialog::new().add_filter("DesignCraft, IDML or InDesign", DOC_EXTS)
+                rfd::AsyncFileDialog::new().add_filter("Missa, IDML or InDesign", DOC_EXTS)
             };
             wasm_bindgen_futures::spawn_local(async move {
                 // Place takes several files, loaded into the place cursor in the order chosen.

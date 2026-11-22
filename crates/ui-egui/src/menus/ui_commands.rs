@@ -24,7 +24,7 @@ pub const UI_COMMANDS: &[(&str, &str, Option<&str>, &str)] = &[
     ("app.contactSheetDialog", "Place Contact Sheet…", None, "{} — place the images loaded in the place cursor on new pages"),
     ("app.saveDialog", "Save As…", Some("Cmd+Shift+S"), "{path?} — without a path, choose where in a dialog"),
     ("app.save", "Save", Some("Cmd+S"), "{}"),
-    ("app.quit", "Quit DesignCraft", Some("Cmd+Q"), "{} — close the window; each document with unsaved changes asks first"),
+    ("app.quit", "Quit Missa", Some("Cmd+Q"), "{} — close the window; each document with unsaved changes asks first"),
     ("app.saveCopyDialog", "Save a Copy…", Some("Cmd+Alt+S"), "{path?} — choose where to write a copy (the document stays as it is)"),
     ("app.loadSwatches", "Load Swatches…", None, "{path?} — pick a swatch exchange (.ase) file"),
     (
@@ -378,7 +378,7 @@ pub const UI_COMMANDS: &[(&str, &str, Option<&str>, &str)] = &[
     ("window.workspace.new", "New Workspace", None, "{name} — save the current workspace (window.newWorkspace)"),
     ("window.workspace.delete", "Delete Workspace", None, "{name} — delete a saved workspace (window.deleteWorkspace)"),
     ("window.workspace.reset", "Reset Workspace", None, "{} — back to the current workspace as saved (window.resetWorkspace)"),
-    ("window.workspace.lock", "Lock Workspace", None, "{locked?} — not available in DesignCraft"),
+    ("window.workspace.lock", "Lock Workspace", None, "{locked?} — not available in Missa"),
     (
         "ui.dock",
         "Change Panel Layout",
@@ -410,6 +410,7 @@ pub const UI_COMMANDS: &[(&str, &str, Option<&str>, &str)] = &[
         "{on?: bool, at?: [x, y] (points from the canvas's top-left)} — the Contextual Task Bar stays where it is (or at `at`) instead of following the selection; with neither, toggles",
     ),
     ("window.taskBarReset", "Reset Bar Position", None, "{} — the Contextual Task Bar follows the selection again, under it"),
+    ("help.missa", "Missa Help…", None, "{} — opens https://www.usemissa.com/help"),
     ("help.discord", "Join the ArtCraft Discord…", None, "{} — opens https://discord.gg/artcraft in the browser"),
     ("help.appPage", "DesignCraft Website…", None, "{} — opens https://getartcraft.com/apps/designcraft"),
     ("help.github", "DesignCraft on GitHub…", None, "{} — opens https://github.com/storytold/designcraft"),
@@ -418,7 +419,7 @@ pub const UI_COMMANDS: &[(&str, &str, Option<&str>, &str)] = &[
     ("help.app", "ArtCraft App Page…", None, "{app} — opens https://getartcraft.com/apps/{app} (e.g. photocraft)"),
     (
         "help.about",
-        "About DesignCraft",
+        "About Missa",
         None,
         "{open?: true, tab?: \"about\"|\"contributors\"|\"models\"} — the About window: splash with community links, contributor and model credits (open: false closes it)",
     ),

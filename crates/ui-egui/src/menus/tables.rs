@@ -643,12 +643,8 @@ pub const MENUS: &[(&str, &[&str])] = &[
     (
         "Help",
         &[
-            "ui:help.discord",
-            "-",
-            "ui:help.appPage",
-            "ui:help.github",
-            "ui:help.issues",
-            "ui:help.website",
+            // Missa: Missa's help only; DesignCraft is credited in About.
+            "ui:help.missa",
             "-",
             "cmd:file.newSample",
             "-",

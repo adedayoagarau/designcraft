@@ -133,7 +133,7 @@ pub fn read_document(path: &str, cancel: &std::sync::atomic::AtomicBool) -> Resu
         return Ok(ReadDocument { path: path.to_string(), content: ReadContent::Interchange(bytes) });
     }
     if !native && legacy.is_none() {
-        return Err(bad("file.open", format!("{path}: not a DesignCraft or IDML file")));
+        return Err(bad("file.open", format!("{path}: not a Missa or IDML file")));
     }
     let (mut d, warnings) = match legacy {
         Some(loaded) => loaded,

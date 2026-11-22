@@ -73,10 +73,11 @@ pub fn start() {
                     }
                     let inbox: Inbox = Inbox::default();
                     let errors: std::sync::Arc<std::sync::Mutex<Vec<String>>> = Default::default();
+                    let unsaved: Unsaved = Default::default();
                     let opened = open_path(&query());
                     // Missa: a document opened from Missa saves back to it, not to the downloads.
                     let save_to = opened.as_ref().and_then(|(path, _)| save_path(path));
-                    let mut app = DesignApp::new(Session::new(), services(inbox.clone(), cc.egui_ctx.clone(), save_to, errors.clone()));
+                    let mut app = DesignApp::new(Session::new(), services(inbox.clone(), cc.egui_ctx.clone(), save_to, errors.clone(), unsaved.clone()));
                     if has_query_flag(&query(), "sample") {
                         let _ = app.run("file.newSample", serde_json::json!({}));
                     }
@@ -99,9 +100,9 @@ pub fn start() {
                         });
                         // `fit`: a first layout from Missa. Once it opens, its pages follow its text.
                         let fit_pending = has_query_flag(&query(), "fit");
-                        return Ok(Box::new(WebShell { app, inbox, read_errors: errors, graphics: creator_graphics, fit_pending }));
+                        return Ok(Box::new(WebShell { app, inbox, read_errors: errors, graphics: creator_graphics, fit_pending, unsaved }));
                     }
-                    Ok(Box::new(WebShell { app, inbox, read_errors: errors, graphics: creator_graphics, fit_pending: false }))
+                    Ok(Box::new(WebShell { app, inbox, read_errors: errors, graphics: creator_graphics, fit_pending: false, unsaved }))
                 }),
             )
             .await;
@@ -414,6 +415,33 @@ struct WebShell {
     graphics: GraphicsState,
     /// Missa: fit the issue opened with `?fit` once it has opened.
     fit_pending: bool,
+    /// Missa: documents whose save to Missa failed after Save had already marked them saved.
+    unsaved: Unsaved,
+}
+
+/// Names (`<title>.designcraft`) of documents whose save to Missa was refused or lost.
+type Unsaved = std::sync::Arc<std::sync::Mutex<Vec<String>>>;
+
+/// Missa: Save marks a document saved as soon as it is handed over, but the PUT finishes later.
+/// When it fails, mark the document unsaved again, so leaving or closing still warns.
+fn mark_unsaved(app: &mut DesignApp, names: Vec<String>) {
+    for name in names {
+        let Some(index) = app.session.documents().iter().position(|d| d.path.as_deref() == Some(name.as_str())) else { continue };
+        let back = app.session.active_index().filter(|&b| b != index);
+        if back.is_some() {
+            app.session.set_active(index);
+        }
+        if let Some(st) = app.session.active_mut()
+            && !st.is_dirty()
+        {
+            // Dirty means the document differs from the saved allocation; a copy is never it.
+            st.saved_doc = std::sync::Arc::new((*st.doc).clone());
+            st.saved_revision = st.revision.wrapping_sub(1);
+        }
+        if let Some(back) = back {
+            app.session.set_active(back);
+        }
+    }
 }
 
 /// Missa: a first layout comes with an estimate of its pages. Make its longest threaded story
@@ -445,6 +473,10 @@ impl eframe::App for WebShell {
         let errors = std::mem::take(&mut *self.read_errors.lock().unwrap_or_else(|e| e.into_inner()));
         if let Some(error) = errors.into_iter().last() {
             self.app.status(error);
+        }
+        let unsaved = std::mem::take(&mut *self.unsaved.lock().unwrap_or_else(|e| e.into_inner()));
+        if !unsaved.is_empty() {
+            mark_unsaved(&mut self.app, unsaved);
         }
         let _ = graphics.run_if_healthy(|| self.app.logic(ctx));
         if self.fit_pending && self.app.session.active().is_some() {
@@ -502,7 +534,7 @@ impl eframe::App for WebShell {
     }
 }
 
-fn services(inbox: Inbox, ctx: egui::Context, save_to: Option<String>, notices: std::sync::Arc<std::sync::Mutex<Vec<String>>>) -> Services {
+fn services(inbox: Inbox, ctx: egui::Context, save_to: Option<String>, notices: std::sync::Arc<std::sync::Mutex<Vec<String>>>, unsaved: Unsaved) -> Services {
     let open_inbox = inbox.clone();
     let save_ctx = ctx.clone();
     // Save hands the document over as `<title>.designcraft`; from Missa it goes back to Missa.
@@ -513,12 +545,17 @@ fn services(inbox: Inbox, ctx: egui::Context, save_to: Option<String>, notices: 
         };
         let bytes = bytes.to_vec();
         let notices = notices.clone();
+        let unsaved = unsaved.clone();
+        let name = name.to_string();
         let ctx = save_ctx.clone();
         notices.lock().unwrap_or_else(|e| e.into_inner()).push("Saving to Missa…".into());
         wasm_bindgen_futures::spawn_local(async move {
             let message = match put_bytes(&target, &bytes).await {
                 Ok(()) => "Saved to Missa.".to_string(),
-                Err(e) => format!("Couldn’t save to Missa: {}. Your changes are still here. Save again to retry.", e.trim_end_matches('.')),
+                Err(e) => {
+                    unsaved.lock().unwrap_or_else(|e| e.into_inner()).push(name);
+                    format!("Couldn’t save to Missa: {}. Your changes are still here. Save again to retry.", e.trim_end_matches('.'))
+                }
             };
             notices.lock().unwrap_or_else(|e| e.into_inner()).push(message);
             ctx.request_repaint();

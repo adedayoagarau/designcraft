@@ -20,9 +20,40 @@ pub(crate) fn open_path(query: &str) -> Option<(String, String)> {
         return None;
     }
     let file_part = path.split(['?', '#']).next()?;
-    let name = file_part.rsplit('/').next().filter(|n| !n.is_empty())?.to_string();
+    let raw = file_part.rsplit('/').next().filter(|n| !n.is_empty())?;
+    let name = percent_decode(raw);
     let ext = name.rsplit_once('.').map(|(_, e)| e.to_ascii_lowercase())?;
     matches!(ext.as_str(), "designcraft" | "idml").then_some((path, name))
+}
+
+/// Missa: where Save sends the document opened from `open` (a path `open_path` accepted): the
+/// same folder and name, as a `.designcraft` file. Missa keeps each save as a new version.
+pub(crate) fn save_path(open: &str) -> Option<String> {
+    let file_part = open.split(['?', '#']).next()?;
+    let (folder, file) = file_part.rsplit_once('/')?;
+    let (stem, _) = file.rsplit_once('.')?;
+    (!stem.is_empty()).then(|| format!("{folder}/{stem}.designcraft"))
+}
+
+/// `%XX` escapes decoded, as a link spells a file name (`Issue%2022.idml`). Anything that isn't a
+/// valid escape or valid UTF-8 is kept as written.
+fn percent_decode(s: &str) -> String {
+    let bytes = s.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        let hex = |b: u8| (b as char).to_digit(16);
+        if bytes[i] == b'%'
+            && let (Some(Some(h)), Some(Some(l))) = (bytes.get(i + 1).map(|b| hex(*b)), bytes.get(i + 2).map(|b| hex(*b)))
+        {
+            out.push((h * 16 + l) as u8);
+            i += 3;
+        } else {
+            out.push(bytes[i]);
+            i += 1;
+        }
+    }
+    String::from_utf8(out).unwrap_or_else(|_| s.to_string())
 }
 
 pub(crate) fn mime_for(name: &str) -> &'static str {
@@ -38,7 +69,7 @@ pub(crate) fn mime_for(name: &str) -> &'static str {
 
 #[cfg(test)]
 mod tests {
-    use super::{has_query_flag, mime_for, open_path};
+    use super::{has_query_flag, mime_for, open_path, save_path};
 
     #[test]
     fn open_takes_only_same_origin_document_paths() {
@@ -58,6 +89,15 @@ mod tests {
         ] {
             assert!(open_path(refused).is_none(), "{refused}");
         }
+    }
+
+    #[test]
+    fn saves_go_beside_the_opened_file_and_names_read_as_written() {
+        let (path, name) = open_path("?open=%2Fapi%2Forgs%2Fo%2Fissues%2Fi%2Fdesign%2FIssue%252022.idml").unwrap_or_default();
+        assert_eq!(name, "Issue 22.idml");
+        assert_eq!(save_path(&path).as_deref(), Some("/api/orgs/o/issues/i/design/Issue%2022.designcraft"));
+        assert_eq!(save_path("/a/b.designcraft?v=2").as_deref(), Some("/a/b.designcraft"));
+        assert_eq!(save_path("/a/.idml"), None);
     }
 
     #[test]
